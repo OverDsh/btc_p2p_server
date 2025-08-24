@@ -74,3 +74,7 @@ class Verack(Message):
 class Pong(Message):
     def __init__(self, payload, magic_bytes="f9beb4d9"):
         super().__init__("pong", payload, magic_bytes)
+
+class GetData(Message):
+    def __init__(self, payload, magic_bytes="f9beb4d9"):
+        super().__init__("getdata", payload, magic_bytes)

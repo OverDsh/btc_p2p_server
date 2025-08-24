@@ -30,6 +30,8 @@ class Server():
         #TCP buffer init
         self.socket_buffer = bytearray()
         self.timeout = timeout
+
+        self.events = {}
         
     def connect(self):
         #Prepare the TCP socket for data exange
@@ -39,6 +41,26 @@ class Server():
         #Begin to exange data
         print("[+] Connected! Initiating handshake...")
         self._handshake()
+    
+    #Bind a callback to an event
+    def on(self, event: str):
+        def decorator(callback):
+            if not event in self.events:
+                self.events[event] = []
+            self.events[event].append(callback)
+        return decorator
+        
+    
+    #Trigger an event
+    def _emit_event(self, event, *args, **kwargs):
+        if not event in self.events:
+            return
+        
+        for callback in self.events[event]:
+            callback(*args, **kwargs)
+    
+    def send(self, message: str):
+        self.socket.sendall(bytes.fromhex(message))
     
     def receive(self, size: int):
         start = time.time()
@@ -58,7 +80,7 @@ class Server():
         #Generate a version message and output it to the user
         version_msg = messages.Version(ipv6=_ip_to_ipv6(self.remoteIP), magic_bytes=self.magic, port=self.port)
         print(f"\n[>] Sending version: \n->{version_msg}")
-        self.socket.sendall(bytes.fromhex(version_msg.build_message()))
+        self.send(version_msg.build_message())
 
         # Verack should only be sent once
         sent_ack = False
@@ -76,6 +98,8 @@ class Server():
                 checksum = header[20:24].hex()
                 payload = self.receive(length).hex()
                 
+                self._emit_event(command, payload)
+
                 #Pretty print
                 message_object = messages.Message(command, payload, magic)
                 print(f"\n[<] Recieved {command}: \n<-{message_object}")
@@ -89,13 +113,14 @@ class Server():
                     sent_ack = True
                     verack = messages.Verack(self.magic)
                     print(f"\n[>] Sending verack: \n {verack}")
-                    self.socket.sendall(bytes.fromhex(verack.build_message()))
+                    self.send(verack.build_message())
+                elif command == "verack":
                     print("[✓] Handshake complete!")
                 elif command == "ping":
                     #Reply with pong message
                     pong = messages.Pong(payload, self.magic)
                     print(f"\n[>] Sending pong: \n-> {pong}")
-                    self.socket.sendall(bytes.fromhex(pong.build_message()))
+                    self.send(pong.build_message())
             except socket.timeout:
                 print("[-] Socket timeout")
                 break
